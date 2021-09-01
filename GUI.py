@@ -4,6 +4,7 @@ import tkinter.messagebox as msg
 import tkinter.filedialog as fdialog
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 import time
 import smbus
 from random import gauss
@@ -110,7 +111,7 @@ class App(tk.Tk):
         # Amostras por segundo
         ttk.Label(self, text = "Amostras por segundo").grid(row=8, column=3)
         self.samplesPerSecEntry = ttk.Entry(self, width = 10)
-        self.samplesPerSecEntry.insert(0,"2")
+        self.samplesPerSecEntry.insert(0,"5")
         self.samplesPerSecEntry.grid(row=8, column=4)
 
         #Botão para atualizar as listas de tempo, corrente e tensão
@@ -120,12 +121,12 @@ class App(tk.Tk):
 
         ################Deletar
         self.maxCurrentEntry.insert(0,"100")
-        self.increaseTimeEntry.insert(0,"2")
-        self.decreaseTimeEntry.insert(0,"4")
-        self.stableTimeEntry.insert(0,"8")
+        self.increaseTimeEntry.insert(0,"10")
+        self.decreaseTimeEntry.insert(0,"20")
+        self.stableTimeEntry.insert(0,"30")
         self.secondCurrentEntry.insert(0,"50")
-        self.lastDecreaseTimeEntry.insert(0,"10")
-        self.endTimeEntry.insert(0,"12")
+        self.lastDecreaseTimeEntry.insert(0,"50")
+        self.endTimeEntry.insert(0,"70")
         ##################
 
         self.bus = smbus.SMBus(1)
@@ -141,6 +142,8 @@ class App(tk.Tk):
             self.currentTx = data['currentTx']
             self.currentRx = data['currentRx']
             self.voltageRx = data['voltageRx']
+            self.potTx = data['powerTx']
+            self.potRx = data['powerRx']
         except:
             msg.showerror('Erro de leitura', 'Algum dos parâmetros não foi encontrado')
             return
@@ -155,7 +158,6 @@ class App(tk.Tk):
             self.lastDecreaseTime = float(self.lastDecreaseTimeEntry.get())
             self.endTime = float(self.endTimeEntry.get())
             self.samplesPerSec = int(self.samplesPerSecEntry.get())
-            #self.slaveAddress = int(self.slaveAddressEntry.get())
             if ((self.endTime < self.lastDecreaseTime or self.lastDecreaseTime < self.stableTime or self.stableTime < self.decreaseTime or self.decreaseTime < self.increaseTime)):
                 msg.showerror('Parâmetros', 'O tempo máximo deve ser maior do que o início do decremento e término do incremento!')
             else:
@@ -166,8 +168,6 @@ class App(tk.Tk):
 
     def initialParameters(self):
         self.updateValues()
-        # print("PYTHONPATH:", os.environ.get('PYTHONPATH'))
-        # print("PATH:", os.environ.get('PATH'))
         self.stepSize = 1/self.samplesPerSec
         self.xValue = [0]
         self.currentTx = []
@@ -225,117 +225,143 @@ class App(tk.Tk):
 
 
     def graph(self):
-        plt.style.use('fivethirtyeight')
+        plt.style.use('tableau-colorblind10')
         self.updateValues()            
         figs, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
-        ax1.set_title('Comunicacao I2C')
-        ax1.set_ylabel('Corrente(A)')
-        ax2.set_ylabel('Tensao(V)')
-        ax2.set_xlabel('Tempo(s)')
-        x = []
-        y1 = []
+
+        self.x = []
+        self.y1 = []
         self.index=0
         self.startTime = time.perf_counter()
         def animate(i):                    
-            self.i2cTransfer(self.index)
-            x.append(self.xValue[self.index])
-            y1.append(self.currentTx[self.index])
-            self.index = self.index + 1
+            self.i2cTransfer()
+            
             ax1.cla()
             ax2.cla()
-            ax1.plot(x, y1, label='Corrente transmitida')
-            ax1.plot(x, self.currentRx, label='Corrente medida')
-            ax2.plot(x, self.voltageRx, label='Tensao medida')
+            ax1.set_title('Comunicação I2C')
+            ax1.set_ylabel('Corrente(A)')
+            ax2.set_ylabel('Tensão(V)')
+            ax2.set_xlabel('Tempo(s)')
+            ax1.plot(self.x, self.y1, label='Corrente transmitida')
+            ax1.plot(self.x, self.currentRx, label='Corrente medida')
+            ax2.plot(self.x, self.voltageRx, label='Tensao medida')
             ax1.legend()
             ax2.legend()
-            
-            plt.grid()
-            plt.grid()
-            ax1.fill_between(x, y1, self.currentRx)
+            ax1.grid()
+            ax2.grid()
+            figs.tight_layout()
+
             if self.index == len(self.currentTx):
                 ani.event_source.stop()
+                ax1.fill_between(self.xValue, self.currentRx, self.currentTx, facecolor = 'green', interpolate = True, alpha = 0.25)
                 self.powerW()
-                print(len(self.potRx))
-                print(len(self.potTx))
+                figure, (pax1, pax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
+                pax1.set_title('Potência em Quilowatts')
+                pax1.set_ylabel('Potência(kW)')
+                pax2.set_ylabel('Potência(kW)')
+                pax2.set_xlabel('Tempo(s)')
+                pax1.plot(self.xValue, self.potTx, label='Potência enviada')
+                pax1.plot(self.xValue, self.potRx, label='Potência medida')
+                pax1.fill_between(self.xValue, self.potTx, self.potRx, facecolor = 'green', interpolate = True, alpha = 0.25)
+                pax2.plot(self.xValue, self.potDif, label='Diferença da potência medida e enviada')
+                pax2.fill_between(self.xValue, 0, self.potDif, where = np.array(self.potDif)>=0, facecolor = 'green', interpolate = True, alpha = 0.25)
+                pax2.fill_between(self.xValue, self.potDif, 0, where = np.array(self.potDif)<=0, facecolor = 'red', interpolate = True, alpha = 0.25)
+                pax1.legend()
+                pax2.legend()
+            
+                pax1.grid()
+                pax2.grid()
+                figure.tight_layout()
+                plt.show()
                 
         ani = animation.FuncAnimation(plt.gcf(), animate, interval = 1, repeat=False)
-        figs.tight_layout()
         plt.show()
 
-        # figure, (axT, axR) = plt.subplots(nrows=2, ncols=1, sharex=True)
-        # self.potR = self.currentRx * self.voltageRx
-        # self.potT = self.currentTx * self.voltageRx
-        # axT.plot(self.xValue, self.potT)
-        # axR.plot()
-        # axR.plot()
-        
-
     # Função para fazer o envio e recebimento dos dados
-    def i2cTransfer(self, i):
-        nowTime = time.perf_counter() - self.startTime
-        while nowTime < self.xValue[i]:
+    def i2cTransfer(self):
+        for i in range(self.samplesPerSec):
+            if self.index == len(self.currentTx):
+                break
+            nowTime = time.perf_counter() - self.startTime
+            while nowTime < self.xValue[self.index]:
                 nowTime = time.perf_counter() - self.startTime
-        try:
+            try:
                 # Enviar o valor da corrente a ser alterada
-                MSBTx = (int(self.currentTx[i]*100)) >> 8
-                LSBTx = (int(self.currentTx[i]*100)) & 255
+                MSBTx = (int(self.currentTx[self.index]*100)) >> 8
+                LSBTx = (int(self.currentTx[self.index]*100)) & 255
                 self.bus.write_byte(0x10, LSBTx)
                 self.bus.write_byte(0x10, MSBTx)
-        except:
+            except:
                 print('Problema na transferência')
-        try:
+            try:
                 # Receber a corrente medida
                 LSBRx = self.bus.read_byte(0x10)
                 MSBRx = self.bus.read_byte(0x10)
                 val = ((MSBRx << 8) + LSBRx)
                 val=val*0.001*gauss(10,1)
                 self.currentRx.append(round(val,2))
-        except:
+            except:
                 print('Problema na recepção da corrente')
-        try:
+            try:
                 # Receber a tensão medida
                 LSBRx = self.bus.read_byte(0x10)
                 MSBRx = self.bus.read_byte(0x10)
                 val = ((MSBRx << 8) + LSBRx)
                 val=val*0.01
                 self.voltageRx.append(round(val,2))
-        except:
+            except:
                 print('Problema na recepção da tensão')
-
+            self.x.append(self.xValue[self.index])
+            self.y1.append(self.currentTx[self.index])
+            self.index = self.index + 1
+        return
+            
     def analyzeGraph(self):
         self.browseFile()
-        plt.cla()
-        plt.plot(self.xValue, self.currentTx, label='Corrente Enviada')
-        plt.plot(self.xValue, self.currentRx, label='Leitura de Corrente')
+        figures, (ax01, ax02, ax03) = plt.subplots(nrows=3, ncols=1, sharex=True)
+        ax01.cla()
+        ax02.cla()
+        ax03.cla()
+        ax01.set_title(self.filePathOpen)
+        ax01.set_ylabel('Corrente(A)')
+        ax02.set_ylabel('Tensao(V)')
+        ax03.set_ylabel('Potência(kW)')
+        ax02.set_xlabel('Tempo(s)')
+        ax01.plot(self.xValue, self.currentTx, label='Corrente enviada')
+        ax01.plot(self.xValue, self.currentRx, label='Corrente medida')
+        ax02.plot(self.xValue, self.voltageRx, label='Tensao medida')
+        ax03.plot(self.xValue, self.potTx, label='Potência enviada')
+        ax03.plot(self.xValue, self.potRx, label='Potência medida')
+        ax01.legend()
+        ax02.legend()
+        ax03.legend()
+        ax01.grid()
+        ax02.grid()
+        ax03.grid()
 
-        # plt.fill_between(self.xValue, self.currentTx, self.currentRx, where=(self.currentTx>self.currentRx), interpolate=True, alpha = 0.2)
-        # plt.fill_between(self.xValue, self.currentRx, self.currentTx, where=(self.currentRx<self.currentTx), interpolate=True, alpha = 0.2)
-        plt.legend(loc='upper left')
-        plt.tight_layout()
+        figures.tight_layout()
         plt.show()
 
 
     def connect(self):
         try:
-            #self.slaveAddress = int(self.slaveAddressEntry.get())
             self.bus.write_quick(0x10)
-            self.connectBtn = ttk.Button(self,text = 'Conectado')
-            print('done')
-            msg.OK
+            msg.showinfo('Conexão', 'Conectado com escravo no endereço: 0x10.')
         
         except:
-            print('deu ruim')
+            msg.showerror('Conexão', 'Escravo não conectado.')
             return
-            #msg.showerror('I2C error', 'O escravo não foi encontrado no endereço: ' + self.slaveAddress)
        
     def powerW(self):
         self.potTx = []
         self.potRx = []
+        self.potDif = []
         for i in range(len(self.currentRx)):
             pot = self.currentTx[i]*self.voltageRx[i]
-            self.potTx.append(round(pot,2))
+            self.potTx.append(round(pot/1000,2))
             pot = self.currentRx[i]*self.voltageRx[i]
-            self.potRx.append(round(pot,2))        
+            self.potRx.append(round(pot/1000,2))   
+            self.potDif.append(self.potRx[i] - self.potTx[i])     
         
     def resetSetting(self):
         self.maxCurrentEntry.delete(0,'end')
@@ -348,15 +374,15 @@ class App(tk.Tk):
         self.samplesPerSecEntry.delete(0,'end')
 
     def saveAsFile(self):
-        self.filePathSave = fdialog.asksaveasfilename(initialdir="/<file_name>", initialfile="({}-{}-{}-{})_{}s__({}_{})A".format(round(self.increaseTime),round(self.decreaseTime),round(self.stableTime),round(self.lastDecreaseTime),round(self.endTime),round(self.maxCurrent),round(self.secondCurrent)), defaultextension='.csv', filetypes=[("Comma Separated Values",".csv"),("All files",".*")])
-        pd.DataFrame({'xValue':self.xValue,'currentTx':self.currentTx, 'currentRx':self.currentRx, 'voltageRx':self.voltageRx}).to_csv(self.filePathSave, index=False)
+        self.filePathSave = fdialog.asksaveasfilename(initialdir="/<file_name>", initialfile="({}-{}-{}-{})_{}s__({}_{})A__{}SampPerSec".format(round(self.increaseTime),round(self.decreaseTime),round(self.stableTime),round(self.lastDecreaseTime),round(self.endTime),round(self.maxCurrent),round(self.secondCurrent),self.samplesPerSec), defaultextension='.csv', filetypes=[("Comma Separated Values",".csv"),("All files",".*")])
+        pd.DataFrame({'xValue':self.xValue,'currentTx':self.currentTx, 'currentRx':self.currentRx, 'voltageRx':self.voltageRx, 'powerTx':self.potTx, 'powerRx':self.potRx}).to_csv(self.filePathSave, index=False)
 
     def saveFile(self):
         if self.filePathSave != "":
-            pd.DataFrame({'xValue':self.xValue,'currentTx':self.currentTx, 'currentRx':self.currentRx, 'voltageRx':self.voltageRx}).to_csv(self.filePathSave, index=False)
+            pd.DataFrame({'xValue':self.xValue,'currentTx':self.currentTx, 'currentRx':self.currentRx, 'voltageRx':self.voltageRx, 'powerTx':self.potTx, 'powerRx':self.potRx}).to_csv(self.filePathSave, index=False)
         else:
             try:
-                pd.DataFrame({'xValue':self.xValue,'currentTx':self.currentTx, 'currentRx':self.currentRx, 'voltageRx':self.voltageRx}).to_csv(self.filePathOpen, index=False)
+                pd.DataFrame({'xValue':self.xValue,'currentTx':self.currentTx, 'currentRx':self.currentRx, 'voltageRx':self.voltageRx, 'powerTx':self.potTx, 'powerRx':self.potRx}).to_csv(self.filePathOpen, index=False)
             except:
                 msg.showerror('')    
 
