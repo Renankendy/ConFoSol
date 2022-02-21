@@ -15,12 +15,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 class Mainframe(ttk.Frame):
     def __init__(self,master,*args,**kwargs):
         # *args junta os argumentos posicionais na tupla args
-        #  **kwargs junta os argumentos de palavras chave no dicionário kwargs
-        
+        #  **kwargs junta os argumentos de palavras chave no dicionário kwargs       
         super(Mainframe,self).__init__(master,*args,**kwargs)
-        # using super means if you change the base class 
-        # you do not have to change this line
-        # in this case the * and ** operators unpack the parameters
         
 class App(tk.Tk):
     def __init__(self):
@@ -117,17 +113,6 @@ class App(tk.Tk):
         #Botão para atualizar as listas de tempo, corrente e tensão
         self.writeBtn = ttk.Button(self,text = 'Alterar',width = 25, command=self.initialParameters)
         self.writeBtn.grid(row=10, column=4)
-
-
-        ################Deletar
-        self.maxCurrentEntry.insert(0,"100")
-        self.increaseTimeEntry.insert(0,"10")
-        self.decreaseTimeEntry.insert(0,"20")
-        self.stableTimeEntry.insert(0,"30")
-        self.secondCurrentEntry.insert(0,"50")
-        self.lastDecreaseTimeEntry.insert(0,"50")
-        self.endTimeEntry.insert(0,"70")
-        ##################
 
         self.bus = smbus.SMBus(1)
 
